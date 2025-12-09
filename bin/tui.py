@@ -23,6 +23,7 @@ from textual.widgets import (
     TabPane,
 )
 from bin.utils.ui_helpers import (
+    check_chromedriver_available,
     discover_scrapers,
     get_all_config_categories,
     load_epub_files,
@@ -468,10 +469,19 @@ class ConvertPane(Container):
         """Initialize the convert pane."""
         super().__init__(*args, **kwargs)
         self.file_paths = []  # Store file paths separately from widget IDs
+        self.chromedriver_available, self.chromedriver_message = check_chromedriver_available()
 
     def compose(self) -> ComposeResult:
         """Compose the convert pane."""
         yield Label("Convert EPUB to XTC", classes="title")
+
+        # Check if chromedriver is available
+        if not self.chromedriver_available:
+            yield Label("Conversion Unavailable", classes="subtitle")
+            yield Label(self.chromedriver_message, classes="info")
+            yield Label("After installing, restart the application.", classes="attribution")
+            return
+
         yield Label(
             "Convert EPUB files to XTC format for XTeink devices. Requires Chrome/Chromium browser.",
             classes="info",
@@ -500,7 +510,8 @@ class ConvertPane(Container):
 
     def on_mount(self) -> None:
         """Load files when pane is mounted."""
-        self.load_epub_files()
+        if self.chromedriver_available:
+            self.load_epub_files()
 
     def load_epub_files(self):
         """Load list of EPUB files from texts directory."""

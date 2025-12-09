@@ -7,8 +7,29 @@ bin/gui.py and bin/tui.py, following the DRY (Don't Repeat Yourself) principle.
 
 import os
 import re
+import shutil
 
 from bin.config_reader import get_repo_root, read_config_file
+
+
+def check_chromedriver_available():
+    """Check if chromedriver is available on the system.
+
+    Returns:
+        Tuple of (available: bool, message: str)
+        - available: True if chromedriver is found
+        - message: Installation instructions if not available, empty string otherwise
+    """
+    if shutil.which("chromedriver"):
+        return True, ""
+
+    install_msg = (
+        "ChromeDriver is required for EPUB to XTC conversion.\n\n"
+        "Install it with:\n"
+        "  macOS: brew install chromedriver\n"
+        "  Linux: sudo apt-get install chromium-chromedriver"
+    )
+    return False, install_msg
 
 # Core (non-scraper) configuration categories
 CORE_CONFIG_CATEGORIES = {

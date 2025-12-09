@@ -22,8 +22,11 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+import shutil
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
@@ -63,17 +66,25 @@ def setup_chrome_driver(download_dir):
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
-    # Try to create driver (will use system chromedriver)
-    try:
-        driver = webdriver.Chrome(options=chrome_options)
-        return driver
-    except Exception as e:
-        print(f"Error: Could not create Chrome driver: {e}")
+    # Find chromedriver in PATH and use Service to explicitly specify it
+    chromedriver_path = shutil.which("chromedriver")
+    if not chromedriver_path:
+        print("Error: chromedriver not found in PATH")
         print("\nPlease install chromedriver:")
         print("  macOS: brew install chromedriver")
         print("  Linux: apt-get install chromium-chromedriver")
-        print("\nOr install via pip:")
-        print("  pip install webdriver-manager")
+        sys.exit(1)
+
+    try:
+        service = Service(executable_path=chromedriver_path)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        return driver
+    except Exception as e:
+        print(f"Error: Could not create Chrome driver: {e}")
+        print(f"  chromedriver path: {chromedriver_path}")
+        print("\nPlease ensure Chrome/Chromium browser is also installed:")
+        print("  macOS: brew install --cask google-chrome")
+        print("  Linux: apt-get install chromium-browser")
         sys.exit(1)
 
 

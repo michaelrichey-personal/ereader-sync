@@ -21,6 +21,7 @@ except ImportError:
 
 from bin.config_reader import get_repo_root, read_config_file
 from bin.utils.ui_helpers import (
+    check_chromedriver_available,
     discover_scrapers,
     get_all_config_categories,
     load_epub_files,
@@ -626,6 +627,7 @@ class ConvertTab(ctk.CTkFrame):
         super().__init__(master, **kwargs)
         self.file_checkboxes = {}
         self.sync_tab = sync_tab
+        self.chromedriver_available, self.chromedriver_message = check_chromedriver_available()
         self.setup_ui()
 
     def setup_ui(self):
@@ -635,6 +637,37 @@ class ConvertTab(ctk.CTkFrame):
             self, text="Convert EPUB to XTC", font=ctk.CTkFont(size=20, weight="bold")
         )
         title.pack(pady=10)
+
+        # Check if chromedriver is available
+        if not self.chromedriver_available:
+            # Show unavailable message
+            unavailable_frame = ctk.CTkFrame(self)
+            unavailable_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+            warning_label = ctk.CTkLabel(
+                unavailable_frame,
+                text="Conversion Unavailable",
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color=("red", "#FF6B6B"),
+            )
+            warning_label.pack(pady=(20, 10))
+
+            message_label = ctk.CTkLabel(
+                unavailable_frame,
+                text=self.chromedriver_message,
+                wraplength=500,
+                justify="left",
+            )
+            message_label.pack(pady=10, padx=20)
+
+            # Add a hint about restarting
+            hint_label = ctk.CTkLabel(
+                unavailable_frame,
+                text="After installing, restart the application.",
+                text_color=("gray40", "gray60"),
+            )
+            hint_label.pack(pady=(10, 20))
+            return
 
         # Info
         info = ctk.CTkLabel(
