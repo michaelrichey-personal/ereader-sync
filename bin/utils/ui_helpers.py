@@ -293,7 +293,8 @@ def load_epub_files(file_extension=None):
         texts_dir = os.path.join(repo_root, config["TEXTS_DIR"])
 
         if not os.path.exists(texts_dir):
-            return [], f"Error: Directory not found: {texts_dir}"
+            os.makedirs(texts_dir, exist_ok=True)
+            return [], None  # Directory created but empty
 
         # Determine which extensions to include
         # XTC formats: .xtc (legacy), .xtg (fast), .xth (high quality), .xtch (high color)
