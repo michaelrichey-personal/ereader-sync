@@ -1,0 +1,53 @@
+# Secrets and sensitive configuration
+config/secrets.config
+
+# EPUB and XTC files
+texts/
+*.epub
+*.xtc
+.xtc_temp/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyc
+*.pyo
+.python-version
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# uv
+uv.lock
+.python-version.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Kivy
+.buildozer/
+*.kv
+
+# Textual
+.textual/
+*.svg
+
+# coverage
+.coverage/
+.coveragerc/
+
+# Logs
+*.log

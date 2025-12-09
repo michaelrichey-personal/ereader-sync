@@ -1,0 +1,68 @@
+[project]
+name = "ereader"
+version = "0.1.0"
+description = "E-reader content management system for scraping and converting content to e-paper devices"
+readme = "README.md"
+requires-python = ">=3.9,<3.14"
+license = { text = "MIT" }
+authors = [
+    { name = "Michael Richey" }
+]
+
+dependencies = [
+    # Core scraping dependencies
+    "beautifulsoup4>=4.12.0",
+    "requests>=2.31.0",
+    "ebooklib>=0.18",
+    "lxml>=4.9.0",
+    # Fix for LibreSSL compatibility issue on macOS
+    "urllib3<2.0.0",
+    # TUI dependencies
+    "textual>=0.48.0",
+    # Conversion dependencies (EPUB to XTC)
+    "selenium>=4.15.0",
+    # Optional: Rich for enhanced terminal output
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+gui = [
+    "customtkinter>=5.2.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+ereader-gui = "bin.gui:main"
+ereader-tui = "bin.tui:main"
+scrape-hcr = "bin.scrape_hcr_to_epub:main"
+scrape-hn = "bin.scrape_hn_to_epub:main"
+convert-to-xtc = "bin.convert_epub_to_xtc:main"
+upload-to-epaper = "bin.upload_to_epaper:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["bin"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39']
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]

@@ -1,0 +1,21 @@
+# Core scraping dependencies
+beautifulsoup4>=4.12.0
+requests>=2.31.0
+ebooklib>=0.18
+lxml>=4.9.0
+
+# Fix for LibreSSL compatibility issue on macOS
+urllib3<2.0.0
+
+# GUI dependencies (optional - install only if you want the GUI)
+# customtkinter>=5.2.0
+
+# TUI dependencies
+textual>=0.48.0
+pyperclip>=1.8.0  # For clipboard support in TUI
+
+# Conversion dependencies (EPUB to XTC)
+selenium>=4.15.0
+
+# Optional: Rich for enhanced terminal output
+rich>=13.7.0

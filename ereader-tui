@@ -1,0 +1,17 @@
+#!/bin/bash
+# Launcher script for E-Reader TUI
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Determine which Python to use
+# Priority: 1) VIRTUAL_ENV, 2) active python3 in PATH
+if [ -n "$VIRTUAL_ENV" ]; then
+    PYTHON="$VIRTUAL_ENV/bin/python3"
+else
+    # Use whatever python3 is currently active in PATH
+    PYTHON="$(which python3 2>/dev/null || command -v python3 2>/dev/null || echo python3)"
+fi
+
+# Run the TUI
+exec "$PYTHON" "$SCRIPT_DIR/bin/tui.py"

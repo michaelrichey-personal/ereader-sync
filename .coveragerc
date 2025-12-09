@@ -1,0 +1,27 @@
+[run]
+omit =
+    # Exclude UI components (require integration tests)
+    bin/gui.py
+    bin/tui.py
+    # Exclude browser automation (requires Selenium integration tests)
+    bin/converters/convert_epub_to_xtc.py
+    # Exclude WiFi scanner (requires system-level integration)
+    bin/wifi_scanner.py
+    # Exclude test files
+    tests/*
+    # Exclude virtual environment
+    .venv/*
+    venv/*
+
+[report]
+exclude_lines =
+    # Have to re-enable the standard pragma
+    pragma: no cover
+    # Don't complain about missing debug-only code:
+    def __repr__
+    # Don't complain if tests don't hit defensive assertion code:
+    raise AssertionError
+    raise NotImplementedError
+    # Don't complain if non-runnable code isn't run:
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
