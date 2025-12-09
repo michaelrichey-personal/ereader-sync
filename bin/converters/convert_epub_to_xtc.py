@@ -28,11 +28,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from config_reader import get_config, get_repo_root
-from utils.common import output_progress, suppress_urllib3_warning
+from bin.config_reader import get_config, get_repo_root
+from bin.utils.common import output_progress, suppress_urllib3_warning
 
 # Suppress urllib3 warning
 suppress_urllib3_warning()

@@ -8,7 +8,7 @@ bin/gui.py and bin/tui.py, following the DRY (Don't Repeat Yourself) principle.
 import os
 import re
 
-from config_reader import get_repo_root, read_config_file
+from bin.config_reader import get_repo_root, read_config_file
 
 # Core (non-scraper) configuration categories
 CORE_CONFIG_CATEGORIES = {

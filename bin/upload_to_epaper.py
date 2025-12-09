@@ -15,8 +15,8 @@ import sys
 import time
 
 import requests
-from config_reader import get_config, get_repo_root
-from utils.common import output_progress, suppress_urllib3_warning
+from bin.config_reader import get_config, get_repo_root
+from bin.utils.common import output_progress, suppress_urllib3_warning
 
 # Suppress urllib3 warning
 suppress_urllib3_warning()

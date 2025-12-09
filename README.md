@@ -24,7 +24,7 @@ cd ereader-sync
 uv sync                # Install dependencies (use 'uv sync --extra gui' for GUI)
 cp config/secrets.config.template config/secrets.config
 # Edit config/secrets.config with your WiFi passwords
-./ereader-tui          # Run the terminal interface
+uv run ereader-tui     # Run the terminal interface
 ```
 
 Don't have uv? Install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
@@ -75,31 +75,30 @@ sudo apt-get install chromium-chromedriver  # Debian/Ubuntu
 
 **GUI (Graphical Interface):**
 ```bash
-./ereader-gui
-# or: python3 bin/gui.py
+uv run ereader-gui
+# or: source .venv/bin/activate && ./ereader-gui
 ```
 
 **TUI (Terminal Interface):**
 ```bash
-./ereader-tui
-# or: python3 bin/tui.py
+uv run ereader-tui
+# or: source .venv/bin/activate && ./ereader-tui
 ```
 
 **CLI (Command Line):**
 ```bash
 # Scrape content
-python3 bin/scrape_hcr_to_epub.py      # Heather Cox Richardson letters
-python3 bin/scrape_hackaday_to_epub.py # Hackaday blog
-python3 bin/scrape_hn_to_epub.py       # Hacker News top stories
+uv run scrape-hcr       # Heather Cox Richardson letters
+uv run scrape-hn        # Hacker News top stories
 
 # Convert EPUB to XTC
-python3 bin/convert_epub_to_xtc.py --all
+uv run convert-to-xtc --all
 
 # Upload to e-reader (with WiFi switching)
 ./bin/switch_to_epaper_wifi.sh
 
 # Upload without WiFi switching (if already on e-paper network)
-python3 bin/upload_to_epaper.py
+uv run upload-to-epaper
 ```
 
 ## Documentation

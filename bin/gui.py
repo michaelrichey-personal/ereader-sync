@@ -19,8 +19,8 @@ except ImportError:
     print("\nOr use the TUI instead: ./ereader-tui")
     sys.exit(1)
 
-from config_reader import get_repo_root, read_config_file
-from utils.ui_helpers import (
+from bin.config_reader import get_repo_root, read_config_file
+from bin.utils.ui_helpers import (
     discover_scrapers,
     get_all_config_categories,
     load_epub_files,

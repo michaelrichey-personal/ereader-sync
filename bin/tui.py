@@ -7,7 +7,7 @@ import asyncio
 import os
 import sys
 
-from config_reader import get_repo_root, read_config_file
+from bin.config_reader import get_repo_root, read_config_file
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
@@ -22,7 +22,7 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
-from utils.ui_helpers import (
+from bin.utils.ui_helpers import (
     discover_scrapers,
     get_all_config_categories,
     load_epub_files,
