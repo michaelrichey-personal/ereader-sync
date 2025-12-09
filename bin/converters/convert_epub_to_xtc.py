@@ -4,6 +4,9 @@ Script to convert EPUB files to XTC format using x4converter.rho.sh.
 Uses Selenium with headless Chrome to automate the web interface.
 Replaces the original EPUB file with the resulting XTC file.
 
+This tool uses x4converter.rho.sh created by Lukasz.
+Support his work: https://buymeacoffee.com/ukasz
+
 Usage:
     convert_epub_to_xtc.py file.epub              # Convert single file
     convert_epub_to_xtc.py file1.epub file2.epub  # Convert multiple files
@@ -402,6 +405,8 @@ def main():
     """Main function."""
     print("=" * 60)
     print("EPUB to XTC Converter")
+    print("Powered by x4converter.rho.sh - Thanks to Lukasz!")
+    print("Support his work: https://buymeacoffee.com/ukasz")
     print("=" * 60)
 
     # Load configuration

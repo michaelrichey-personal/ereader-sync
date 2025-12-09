@@ -644,6 +644,29 @@ class ConvertTab(ctk.CTkFrame):
         )
         info.pack(pady=5)
 
+        # Attribution
+        attribution_frame = ctk.CTkFrame(self, fg_color="transparent")
+        attribution_frame.pack(fill="x", padx=20, pady=5)
+
+        attribution_text = ctk.CTkLabel(
+            attribution_frame,
+            text="Powered by x4converter.rho.sh - Thanks to Lukasz!",
+            text_color=("gray40", "gray60"),
+        )
+        attribution_text.pack(side="left")
+
+        support_link = ctk.CTkButton(
+            attribution_frame,
+            text="Support his work",
+            command=lambda: __import__("webbrowser").open("https://buymeacoffee.com/ukasz"),
+            width=120,
+            height=24,
+            fg_color="transparent",
+            text_color=("#1E88E5", "#64B5F6"),
+            hover_color=("gray90", "gray20"),
+        )
+        support_link.pack(side="left", padx=10)
+
         # File list label
         files_label = ctk.CTkLabel(self, text="Select EPUBs to convert:", anchor="w")
         files_label.pack(fill="x", padx=20, pady=(10, 5))

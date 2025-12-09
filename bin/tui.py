@@ -476,6 +476,10 @@ class ConvertPane(Container):
             "Convert EPUB files to XTC format for XTeink devices. Requires Chrome/Chromium browser.",
             classes="info",
         )
+        yield Label(
+            "Powered by x4converter.rho.sh - Thanks to Lukasz! Support: https://buymeacoffee.com/ukasz",
+            classes="attribution",
+        )
 
         yield Label("Select EPUBs to convert:", classes="subtitle")
 
@@ -670,6 +674,12 @@ class EReaderTUI(App):
 
     .info {
         color: $primary;
+        margin: 0 1 1 1;
+    }
+
+    .attribution {
+        color: $text-muted;
+        text-style: italic;
         margin: 0 1 1 1;
     }
 
