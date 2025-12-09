@@ -38,9 +38,9 @@ dev = [
 [project.scripts]
 ereader-gui = "bin.gui:main"
 ereader-tui = "bin.tui:main"
-scrape-hcr = "bin.scrape_hcr_to_epub:main"
-scrape-hn = "bin.scrape_hn_to_epub:main"
-convert-to-xtc = "bin.convert_epub_to_xtc:main"
+scrape-hcr = "bin.scrapers.scrape_hcr_to_epub:main"
+scrape-hn = "bin.scrapers.scrape_hn_to_epub:main"
+convert-to-xtc = "bin.converters.convert_epub_to_xtc:main"
 upload-to-epaper = "bin.upload_to_epaper:main"
 
 [build-system]
