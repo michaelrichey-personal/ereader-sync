@@ -1,153 +1,199 @@
 # E-Reader Content Management System
 
-A comprehensive system for scraping web content and syncing to an e-paper device.
-
-## Quick Start
-
-### 1. Install Dependencies
-
-**Using uv (recommended - faster):**
-```bash
-# Install uv if you haven't already
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install core dependencies (TUI, scrapers, converters)
-uv sync
-```
-
-**Optional: Add GUI Support**
-
-The GUI uses CustomTkinter (modern, lightweight, zero dependency issues):
-
-```bash
-# Install GUI dependencies
-uv sync --extra gui
-
-# Or with pip:
-pip3 install -e ".[gui]"
-```
-
-**⚠️  Important Notes:**
-- **Tk 8.6 Required:** The GUI requires Python built with Tk 8.6 (NOT Tk 9.0). Tk 9.0 has a critical bug on macOS that breaks scrolling.
-- **Python 3.12.12 Recommended:** Use Python 3.12.12 for best compatibility. Python 3.14+ includes Tk 9.0 by default.
-- **Check your Tk version:** Run `python3 -c "import tkinter; print(tkinter.TclVersion)"` - it should output `8.6`
-- If tkinter is missing or you have Tk 9.0, see `INSTALL.md` for setup instructions
-- **Alternative:** The TUI (`ereader-tui`) has all the same features and requires no tkinter!
-
-### 2. Configure
-
-```bash
-# Copy secrets template
-cp config/secrets.config.template config/secrets.config
-
-# Edit your WiFi passwords
-vi config/secrets.config
-
-# Optionally edit application settings
-vi config/application.config
-```
-
-### 3. Run
-
-**Graphical Interface:**
-```bash
-# If installed with uv pip install -e .
-ereader-gui
-
-# Or use the shell script
-./ereader-gui
-```
-
-**Terminal Interface:**
-```bash
-# If installed with uv pip install -e .
-ereader-tui
-
-# Or use the shell script
-./ereader-tui
-```
-
-**Command Line:**
-```bash
-# If installed with uv pip install -e ., you can use:
-scrape-hcr          # Scrape HCR letters
-scrape-hn           # Scrape Hacker News
-convert-to-xtc      # Convert EPUB to XTC
-upload-to-epaper    # Upload files to device
-
-# Or run scripts directly:
-python3 bin/scrape_hcr_to_epub.py
-python3 bin/scrape_hn_to_epub.py
-python3 bin/convert_epub_to_xtc.py
-python3 bin/upload_to_epaper.py
-
-# Sync to e-reader (with WiFi switching)
-./bin/switch_to_epaper_wifi.sh
-```
+A comprehensive system for scraping web content, converting to EPUB/XTC format, and syncing to an e-paper device.
 
 ## Features
 
-### Content Sources
-- **Heather Cox Richardson**: Scrapes "Letters from an American" from Substack
-- **Hacker News**: Scrapes top stories and their linked articles
+- **Content Scrapers**: Fetch top Hacker News stories, Hackaday Blog, and HCR's "Letters from an American"
+- **Format Conversion**: Convert EPUB files to XTC format for XTEink devices
+- **WiFi Management**: Automatically switch networks to upload to e-paper device
+- **Multiple Interfaces**: GUI, TUI, and CLI options
+- **Configurable**: All settings in simple config files
 
-### User Interfaces
-- **GUI**: Kivy-based graphical interface with tabs for settings, secrets, generation, and sync
-- **TUI**: Textual-based terminal interface with the same features
-- **CLI**: Individual Python scripts for automation
+## Requirements
 
-### Configuration
-All settings stored in `config/` directory:
-- `application.config`: Network settings, device IPs, scraper options
-- `secrets.config`: WiFi passwords (not committed to git)
+- **Python**: 3.9 - 3.13 (3.12.12 recommended)
+- **macOS or Linux** (WiFi switching only works on macOS)
+- **Chrome/Chromium** + ChromeDriver (for EPUB to XTC conversion)
 
-### WiFi Management
-Automatically switches to e-paper WiFi network, uploads files, and switches back to original network with safety features:
-- 30-second timeout watchdog
-- Emergency reconnect on errors
-- Configurable timing values
+## Quick Install
 
-## Troubleshooting
+```bash
+git clone https://github.com/michaelrichey-personal/ereader-sync.git
+cd ereader-sync
+uv sync                # Install dependencies (use 'uv sync --extra gui' for GUI)
+cp config/secrets.config.template config/secrets.config
+# Edit config/secrets.config with your WiFi passwords
+./ereader-tui          # Run the terminal interface
+```
 
-Having issues? See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for:
-- WiFi switching problems
-- Upload failures
-- Configuration issues
-- Step-by-step debugging guide
+Don't have uv? Install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
-**Quick Tips:**
-- Use "Test Upload (no WiFi switch)" button in GUI to isolate WiFi vs upload issues
-- Run scripts from terminal to see detailed error messages
-- Verify config files exist and have correct values
+## Detailed Installation
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/michaelrichey-personal/ereader-sync.git
+cd ereader-sync
+```
+
+### 2. Install Dependencies
+
+**Using uv (Recommended):**
+```bash
+uv sync                  # TUI + scrapers + converter
+uv sync --extra gui      # Add GUI support
+uv sync --extra dev      # Add development tools
+```
+
+**Using pip:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install customtkinter>=5.2.0  # Optional: for GUI
+```
+
+### 3. Configure
+
+```bash
+cp config/secrets.config.template config/secrets.config
+nano config/secrets.config  # Add your WiFi passwords
+```
+
+Optionally edit `config/application.config` to customize scraper settings, device IP, etc.
+
+### 4. Install ChromeDriver (for EPUB to XTC conversion)
+
+```bash
+brew install chromedriver        # macOS
+sudo apt-get install chromium-chromedriver  # Debian/Ubuntu
+```
+
+### 5. Run
+
+**GUI (Graphical Interface):**
+```bash
+./ereader-gui
+# or: python3 bin/gui.py
+```
+
+**TUI (Terminal Interface):**
+```bash
+./ereader-tui
+# or: python3 bin/tui.py
+```
+
+**CLI (Command Line):**
+```bash
+# Scrape content
+python3 bin/scrape_hcr_to_epub.py      # Heather Cox Richardson letters
+python3 bin/scrape_hackaday_to_epub.py # Hackaday blog
+python3 bin/scrape_hn_to_epub.py       # Hacker News top stories
+
+# Convert EPUB to XTC
+python3 bin/convert_epub_to_xtc.py --all
+
+# Upload to e-reader (with WiFi switching)
+./bin/switch_to_epaper_wifi.sh
+
+# Upload without WiFi switching (if already on e-paper network)
+python3 bin/upload_to_epaper.py
+```
 
 ## Documentation
 
-See [CLAUDE.md](CLAUDE.md) for detailed architecture and development information.
+- **[INSTALL.md](INSTALL.md)** - Detailed installation guide with troubleshooting
+- **[CLAUDE.md](CLAUDE.md)** - Architecture and development documentation
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** - Common issues and solutions
 
-## File Structure
+## Project Structure
 
 ```
-ereader/
-├── bin/                    # Scripts
-│   ├── config_reader.py    # Config utility
-│   ├── gui.py             # Kivy GUI
-│   ├── tui.py             # Textual TUI
+ereader-sync/
+├── bin/                      # All scripts
+│   ├── gui.py               # CustomTkinter GUI
+│   ├── tui.py               # Textual TUI
 │   ├── scrape_hcr_to_epub.py
+│   ├── scrape_hackaday_to_epub.py
 │   ├── scrape_hn_to_epub.py
+│   ├── convert_epub_to_xtc.py
 │   ├── upload_to_epaper.py
-│   └── switch_to_epaper_wifi.sh
-├── config/                # Configuration
-│   ├── application.config
-│   ├── secrets.config
+│   ├── switch_to_epaper_wifi.sh
+│   └── utils/               # Shared utilities
+│       └── config_reader.py
+├── config/                   # Configuration files
+│   ├── application.config   # App settings (committed)
+│   ├── secrets.config       # Passwords (NOT committed)
 │   └── secrets.config.template
-├── texts/                 # Generated EPUBs
-│   ├── hcr/              # HCR letters
-│   └── hackernews/       # HN stories
-├── ereader-gui           # GUI launcher
-├── ereader-tui           # TUI launcher
-└── requirements.txt      # Python dependencies
+├── texts/                    # Generated content
+│   ├── hcr/                 # HCR letters
+│   ├── hackaday/            # Hackaday blog
+│   └── hackernews/          # HN stories
+├── tests/                    # Test files
+├── ereader-gui              # GUI launcher script
+├── ereader-tui              # TUI launcher script
+├── requirements.txt
+└── pyproject.toml
 ```
+
+## Configuration
+
+All configuration is in the `config/` directory:
+
+| File | Purpose | Git Status |
+|------|---------|------------|
+| `application.config` | Network names, device IP, scraper settings | Committed |
+| `secrets.config` | WiFi passwords | **NOT committed** |
+| `secrets.config.template` | Template for secrets | Committed |
+
+### Key Settings
+
+**Scraper Settings:**
+- `NUM_HCR_POSTS` - Number of HCR letters to fetch (default: 5)
+- `NUM_HN_STORIES` - Number of HN stories to fetch (default: 20)
+- `NUM_HACKADAY_ARTICLES` - Number of Hackaday articles to fetch (default: 10)
+
+**Device Settings:**
+- `EPAPER_DEVICE_IP` - IP address of your e-paper device
+- `EPAPER_NETWORK` - WiFi network name for e-paper device
+
+**Conversion Settings:**
+- `XTC_FONT_FAMILY`, `XTC_FONT_SIZE` - Font settings
+- `XTC_ORIENTATION` - portrait or landscape
+
+See `config/application.config` for all available options.
+
+## Troubleshooting
+
+### GUI won't start / Scrolling doesn't work
+
+The GUI requires Python built with **Tk 8.6** (not Tk 9.0). Tk 9.0 has a bug that breaks scrolling on macOS.
+
+Check your Tk version:
+```bash
+python3 -c "import tkinter; print(tkinter.TclVersion)"
+# Should output: 8.6
+```
+
+If you have Tk 9.0, see [INSTALL.md](INSTALL.md) for instructions on installing Python with Tk 8.6.
+
+**Alternative:** The TUI (`./ereader-tui`) has all the same features and doesn't require tkinter!
+
+### ChromeDriver errors
+
+Make sure ChromeDriver is installed and matches your Chrome version:
+```bash
+chromedriver --version
+```
+
+### WiFi switching fails
+
+WiFi switching only works on macOS and requires the correct network names in your config files.
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more solutions.
 
 ## License
 
-This is personal software for managing e-reader content.
+MIT License - See LICENSE file for details.
