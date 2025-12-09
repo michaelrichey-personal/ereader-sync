@@ -1,4 +1,0 @@
-black
-pytest
-pylint
-ruff

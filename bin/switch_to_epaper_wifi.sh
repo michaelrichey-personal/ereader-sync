@@ -1,15 +1,42 @@
 #!/bin/bash
 #
 # Script to switch to Epaper WiFi network, do something, then switch back
+# Supports both macOS and Linux (NetworkManager or wpa_supplicant)
 #
 
 # Ensure PATH includes standard locations
 export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
+# Detect operating system
+OS_TYPE="$(uname -s)"
+echo "DEBUG: Detected OS: $OS_TYPE"
+
 # Debug: Print environment info
 echo "DEBUG: Running as user: $(whoami)"
 echo "DEBUG: PATH: $PATH"
-echo "DEBUG: networksetup location: $(which networksetup 2>/dev/null || echo 'not in PATH')"
+
+# Detect Linux WiFi backend
+LINUX_WIFI_BACKEND=""
+if [ "$OS_TYPE" = "Linux" ]; then
+    if command -v nmcli &>/dev/null && nmcli general status &>/dev/null 2>&1; then
+        LINUX_WIFI_BACKEND="nmcli"
+        echo "DEBUG: Using NetworkManager (nmcli)"
+    elif command -v wpa_cli &>/dev/null; then
+        LINUX_WIFI_BACKEND="wpa_cli"
+        echo "DEBUG: Using wpa_supplicant (wpa_cli)"
+    elif command -v iwctl &>/dev/null; then
+        LINUX_WIFI_BACKEND="iwd"
+        echo "DEBUG: Using iwd (iwctl)"
+    else
+        echo "ERROR: No supported WiFi manager found on Linux"
+        echo "Please install one of: NetworkManager (nmcli), wpa_supplicant (wpa_cli), or iwd (iwctl)"
+        exit 1
+    fi
+fi
+
+if [ "$OS_TYPE" = "Darwin" ]; then
+    echo "DEBUG: networksetup location: $(which networksetup 2>/dev/null || echo 'not in PATH')"
+fi
 
 # Get script directory to find config files
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -86,46 +113,65 @@ echo "DEBUG: Script starting at $(date)"
 echo "DEBUG: Running from directory: $(pwd)"
 
 # Global variables to track state
-SWITCHED_TO_EPAPER=false
 ORIGINAL_NETWORK=""
 TIMEOUT_PID=""
 
-# Emergency reconnect function - always tries to get back to original network
-emergency_reconnect() {
-    echo ""
-    echo "======================================================"
-    echo "EMERGENCY RECONNECT TRIGGERED"
-    echo "======================================================"
+# ============================================================
+# OS-specific WiFi functions
+# ============================================================
 
-    # Kill timeout process if it exists
-    if [ -n "$TIMEOUT_PID" ] && ps -p "$TIMEOUT_PID" > /dev/null 2>&1; then
-        kill "$TIMEOUT_PID" 2>/dev/null
-    fi
+get_current_network() {
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        # macOS: Try multiple methods to get the SSID
+        local network
+        network=$(/usr/sbin/networksetup -getairportnetwork "$WIFI_INTERFACE" 2>/dev/null | sed 's/Current Wi-Fi Network: //')
 
-    if [ "$SWITCHED_TO_EPAPER" = true ] && [ -n "$ORIGINAL_NETWORK" ]; then
-        echo "Reconnecting to $ORIGINAL_NETWORK..."
-
-        if [ -n "$ORIGINAL_NETWORK_PASSWORD" ]; then
-            /usr/sbin/networksetup -setairportnetwork "$WIFI_INTERFACE" "$ORIGINAL_NETWORK" "$ORIGINAL_NETWORK_PASSWORD" 2>&1
-        else
-            /usr/sbin/networksetup -setairportnetwork "$WIFI_INTERFACE" "$ORIGINAL_NETWORK" 2>&1
+        # If that didn't work, try the airport command
+        if [[ -z "$network" ]] || [[ "$network" == *"You are not associated"* ]]; then
+            network=$(/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | awk '/ SSID/ {print $2}')
         fi
-
-        sleep 8
-        echo -e "${GREEN}Assumed reconnected to $ORIGINAL_NETWORK${NC}"
+        echo "$network"
+    elif [ "$OS_TYPE" = "Linux" ]; then
+        case "$LINUX_WIFI_BACKEND" in
+            nmcli)
+                nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d':' -f2
+                ;;
+            wpa_cli)
+                wpa_cli -i "$WIFI_INTERFACE" status 2>/dev/null | grep '^ssid=' | cut -d'=' -f2
+                ;;
+            iwd)
+                iwctl station "$WIFI_INTERFACE" show 2>/dev/null | grep "Connected network" | awk '{print $3}'
+                ;;
+        esac
+    else
+        echo ""
     fi
 }
 
-# Set up trap to always try to reconnect on exit or interrupt
-trap 'emergency_reconnect; exit' EXIT INT TERM
-
-# Helper functions
 cycle_wifi_interface() {
     echo -e "${YELLOW}Cycling WiFi interface...${NC}"
-    /usr/sbin/networksetup -setairportpower "$WIFI_INTERFACE" off
-    sleep 2
-    /usr/sbin/networksetup -setairportpower "$WIFI_INTERFACE" on
-    sleep 3
+
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        /usr/sbin/networksetup -setairportpower "$WIFI_INTERFACE" off
+        sleep 2
+        /usr/sbin/networksetup -setairportpower "$WIFI_INTERFACE" on
+        sleep 3
+    elif [ "$OS_TYPE" = "Linux" ]; then
+        case "$LINUX_WIFI_BACKEND" in
+            nmcli)
+                nmcli radio wifi off
+                sleep 2
+                nmcli radio wifi on
+                ;;
+            wpa_cli|iwd)
+                ip link set "$WIFI_INTERFACE" down
+                sleep 2
+                ip link set "$WIFI_INTERFACE" up
+                ;;
+        esac
+        sleep 3
+    fi
+
     echo -e "${GREEN}WiFi interface cycled${NC}"
 }
 
@@ -134,29 +180,107 @@ connect_to_network() {
     local password="$2"
 
     echo -e "${YELLOW}Connecting to $network...${NC}"
-    echo "DEBUG: Attempting connection with interface: $WIFI_INTERFACE"
 
-    local result
-    if [ -z "$password" ]; then
-        # Try without password (use keychain)
-        echo "DEBUG: Connecting without password (using keychain)"
-        result=$(/usr/sbin/networksetup -setairportnetwork "$WIFI_INTERFACE" "$network" 2>&1)
+    if [ "$OS_TYPE" = "Darwin" ]; then
+        # macOS
+        echo "DEBUG: Attempting connection with interface: $WIFI_INTERFACE"
+
+        local result
+        if [ -z "$password" ]; then
+            # Try without password (use keychain)
+            echo "DEBUG: Connecting without password (using keychain)"
+            result=$(/usr/sbin/networksetup -setairportnetwork "$WIFI_INTERFACE" "$network" 2>&1)
+        else
+            # Try with password
+            echo "DEBUG: Connecting with password"
+            result=$(/usr/sbin/networksetup -setairportnetwork "$WIFI_INTERFACE" "$network" "$password" 2>&1)
+        fi
+
+        local exit_code=$?
+        echo "DEBUG: networksetup exit code: $exit_code"
+
+        if [ -n "$result" ]; then
+            echo "networksetup output: $result"
+        fi
+
+        if [ $exit_code -ne 0 ]; then
+            echo -e "${RED}WARNING: networksetup returned error code $exit_code${NC}"
+            echo "This may indicate a permissions issue or network not found"
+        fi
+
+    elif [ "$OS_TYPE" = "Linux" ]; then
+        local result
+        local exit_code
+
+        case "$LINUX_WIFI_BACKEND" in
+            nmcli)
+                echo "DEBUG: Attempting connection using nmcli"
+                # First, check if we have a saved connection for this network
+                if nmcli connection show "$network" &>/dev/null; then
+                    echo "DEBUG: Found saved connection, activating..."
+                    result=$(nmcli connection up "$network" 2>&1)
+                    exit_code=$?
+                else
+                    # Create new connection with password
+                    if [ -z "$password" ]; then
+                        echo "DEBUG: Connecting without password"
+                        result=$(nmcli device wifi connect "$network" 2>&1)
+                    else
+                        echo "DEBUG: Connecting with password"
+                        result=$(nmcli device wifi connect "$network" password "$password" 2>&1)
+                    fi
+                    exit_code=$?
+                fi
+                echo "DEBUG: nmcli exit code: $exit_code"
+                ;;
+
+            wpa_cli)
+                echo "DEBUG: Attempting connection using wpa_cli"
+                # Create a temporary config or use wpa_cli to add network
+                local net_id
+                net_id=$(wpa_cli -i "$WIFI_INTERFACE" add_network 2>/dev/null | tail -1)
+
+                if [ -n "$net_id" ] && [ "$net_id" != "FAIL" ]; then
+                    wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" ssid "\"$network\"" >/dev/null 2>&1
+                    if [ -n "$password" ]; then
+                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" psk "\"$password\"" >/dev/null 2>&1
+                    else
+                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" key_mgmt NONE >/dev/null 2>&1
+                    fi
+                    wpa_cli -i "$WIFI_INTERFACE" enable_network "$net_id" >/dev/null 2>&1
+                    result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
+                    exit_code=$?
+                    echo "DEBUG: wpa_cli exit code: $exit_code"
+                else
+                    echo -e "${RED}ERROR: Failed to add network via wpa_cli${NC}"
+                    exit_code=1
+                fi
+                ;;
+
+            iwd)
+                echo "DEBUG: Attempting connection using iwctl"
+                if [ -n "$password" ]; then
+                    # For password-protected networks, we need to use iwctl interactively or agent
+                    result=$(echo "$password" | iwctl station "$WIFI_INTERFACE" connect "$network" --passphrase 2>&1)
+                else
+                    result=$(iwctl station "$WIFI_INTERFACE" connect "$network" 2>&1)
+                fi
+                exit_code=$?
+                echo "DEBUG: iwctl exit code: $exit_code"
+                ;;
+        esac
+
+        if [ -n "$result" ]; then
+            echo "Output: $result"
+        fi
+
+        if [ $exit_code -ne 0 ]; then
+            echo -e "${RED}WARNING: WiFi command returned error code $exit_code${NC}"
+            echo "This may indicate a permissions issue or network not found"
+        fi
     else
-        # Try with password
-        echo "DEBUG: Connecting with password"
-        result=$(/usr/sbin/networksetup -setairportnetwork "$WIFI_INTERFACE" "$network" "$password" 2>&1)
-    fi
-
-    local exit_code=$?
-    echo "DEBUG: networksetup exit code: $exit_code"
-
-    if [ -n "$result" ]; then
-        echo "networksetup output: $result"
-    fi
-
-    if [ $exit_code -ne 0 ]; then
-        echo -e "${RED}WARNING: networksetup returned error code $exit_code${NC}"
-        echo "This may indicate a permissions issue or network not found"
+        echo -e "${RED}ERROR: Unsupported operating system: $OS_TYPE${NC}"
+        return 1
     fi
 
     # Wait for connection to establish
@@ -166,16 +290,14 @@ connect_to_network() {
     return 0
 }
 
+# ============================================================
+# Main script logic
+# ============================================================
+
 # Get current WiFi network
 echo -e "${YELLOW}Getting current WiFi network...${NC}"
 
-# Try multiple methods to get the SSID
-ORIGINAL_NETWORK=$(/usr/sbin/networksetup -getairportnetwork "$WIFI_INTERFACE" 2>/dev/null | sed 's/Current Wi-Fi Network: //')
-
-# If that didn't work, try the airport command
-if [[ -z "$ORIGINAL_NETWORK" ]] || [[ "$ORIGINAL_NETWORK" == *"You are not associated"* ]]; then
-    ORIGINAL_NETWORK=$(/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport -I 2>/dev/null | awk '/ SSID/ {print $2}')
-fi
+ORIGINAL_NETWORK=$(get_current_network)
 
 # Check if we got a network name
 if [[ -z "$ORIGINAL_NETWORK" ]] || [[ "$ORIGINAL_NETWORK" == *"You are not associated"* ]]; then
@@ -185,7 +307,6 @@ if [[ -z "$ORIGINAL_NETWORK" ]] || [[ "$ORIGINAL_NETWORK" == *"You are not assoc
 fi
 
 echo -e "${GREEN}Original network: $ORIGINAL_NETWORK${NC}"
-echo "Safety: Auto-reconnect after ${EPAPER_TIMEOUT}s timeout or on any error/interrupt"
 
 # Check if we're already on the Epaper network
 if [ "$ORIGINAL_NETWORK" = "$EPAPER_NETWORK" ]; then
@@ -204,9 +325,6 @@ if [ "$SKIP_SWITCH" = false ]; then
     echo "======================================================"
 
     connect_to_network "$EPAPER_NETWORK" "$EPAPER_NETWORK_PASSWORD"
-
-    # Mark that we're now on E-Paper (for emergency reconnect)
-    SWITCHED_TO_EPAPER=true
 
     # Start timeout watchdog in background
     echo "Starting ${EPAPER_TIMEOUT}s timeout watchdog..."
@@ -265,12 +383,6 @@ if [ "$SKIP_SWITCH" = false ]; then
     echo "======================================================"
 
     connect_to_network "$ORIGINAL_NETWORK" "$ORIGINAL_NETWORK_PASSWORD"
-
-    # Mark that we're safely back
-    SWITCHED_TO_EPAPER=false
-
-    # Disable the emergency reconnect trap since we're back safely
-    trap - EXIT INT TERM
 else
     echo -e "${YELLOW}Staying on $EPAPER_NETWORK (was already connected)${NC}"
 fi
