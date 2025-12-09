@@ -29,6 +29,8 @@ uv run ereader-tui     # Run the terminal interface
 
 Don't have uv? Install it: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
+**For EPUB to XTC conversion**, install ChromeDriver: `brew install chromedriver` (macOS) or `sudo apt-get install chromium-chromedriver` (Debian/Ubuntu)
+
 ## Detailed Installation
 
 ### 1. Clone the Repository
