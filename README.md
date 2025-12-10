@@ -1,4 +1,6 @@
 # E-Reader Content Management System
+<img width="892" height="726" alt="Screenshot 2025-12-09 at 10 44 00 PM" src="https://github.com/user-attachments/assets/57f99229-5090-4b28-83d0-a57c0fc62f8a" />
+
 
 A comprehensive system for scraping web content, converting to EPUB/XTC format, and syncing to an e-paper device.
 
