@@ -15,29 +15,30 @@ echo "DEBUG: Detected OS: $OS_TYPE"
 echo "DEBUG: Running as user: $(whoami)"
 echo "DEBUG: PATH: $PATH"
 
-# Detect Linux WiFi backend
-LINUX_WIFI_BACKEND=""
+# Detect available Linux WiFi backends (will try in order if one fails)
+LINUX_WIFI_BACKENDS=()
 if [ "$OS_TYPE" = "Linux" ]; then
-    # Check if NetworkManager is actually running (not just installed)
-    if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager 2>/dev/null; then
-        LINUX_WIFI_BACKEND="nmcli"
-        echo "DEBUG: Using NetworkManager (nmcli)"
-    elif command -v wpa_cli &>/dev/null && systemctl is-active --quiet wpa_supplicant 2>/dev/null; then
-        LINUX_WIFI_BACKEND="wpa_cli"
-        echo "DEBUG: Using wpa_supplicant (wpa_cli)"
-    elif command -v iwctl &>/dev/null && systemctl is-active --quiet iwd 2>/dev/null; then
-        LINUX_WIFI_BACKEND="iwd"
-        echo "DEBUG: Using iwd (iwctl)"
-    else
-        echo "ERROR: No supported WiFi manager found running on Linux"
-        echo "Checked: NetworkManager (nmcli), wpa_supplicant (wpa_cli), iwd (iwctl)"
-        echo ""
-        echo "Service status:"
-        systemctl is-active NetworkManager 2>/dev/null || echo "  NetworkManager: not running"
-        systemctl is-active wpa_supplicant 2>/dev/null || echo "  wpa_supplicant: not running"
-        systemctl is-active iwd 2>/dev/null || echo "  iwd: not running"
+    # Check which backends are available (command exists and service is running)
+    if command -v nmcli &>/dev/null; then
+        LINUX_WIFI_BACKENDS+=("nmcli")
+        echo "DEBUG: Found NetworkManager (nmcli)"
+    fi
+    if command -v wpa_cli &>/dev/null; then
+        LINUX_WIFI_BACKENDS+=("wpa_cli")
+        echo "DEBUG: Found wpa_supplicant (wpa_cli)"
+    fi
+    if command -v iwctl &>/dev/null; then
+        LINUX_WIFI_BACKENDS+=("iwd")
+        echo "DEBUG: Found iwd (iwctl)"
+    fi
+
+    if [ ${#LINUX_WIFI_BACKENDS[@]} -eq 0 ]; then
+        echo "ERROR: No supported WiFi manager found on Linux"
+        echo "Please install one of: NetworkManager (nmcli), wpa_supplicant (wpa_cli), or iwd (iwctl)"
         exit 1
     fi
+
+    echo "DEBUG: Available backends (will try in order): ${LINUX_WIFI_BACKENDS[*]}"
 fi
 
 if [ "$OS_TYPE" = "Darwin" ]; then
@@ -125,6 +126,21 @@ ORIGINAL_NETWORK=""
 # OS-specific WiFi functions
 # ============================================================
 
+get_current_network_with_backend() {
+    local backend="$1"
+    case "$backend" in
+        nmcli)
+            nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d':' -f2
+            ;;
+        wpa_cli)
+            wpa_cli -i "$WIFI_INTERFACE" status 2>/dev/null | grep '^ssid=' | cut -d'=' -f2
+            ;;
+        iwd)
+            iwctl station "$WIFI_INTERFACE" show 2>/dev/null | grep "Connected network" | awk '{print $3}'
+            ;;
+    esac
+}
+
 get_current_network() {
     if [ "$OS_TYPE" = "Darwin" ]; then
         # macOS: Try multiple methods to get the SSID
@@ -137,17 +153,16 @@ get_current_network() {
         fi
         echo "$network"
     elif [ "$OS_TYPE" = "Linux" ]; then
-        case "$LINUX_WIFI_BACKEND" in
-            nmcli)
-                nmcli -t -f active,ssid dev wifi 2>/dev/null | grep '^yes' | cut -d':' -f2
-                ;;
-            wpa_cli)
-                wpa_cli -i "$WIFI_INTERFACE" status 2>/dev/null | grep '^ssid=' | cut -d'=' -f2
-                ;;
-            iwd)
-                iwctl station "$WIFI_INTERFACE" show 2>/dev/null | grep "Connected network" | awk '{print $3}'
-                ;;
-        esac
+        # Try each backend until one returns a result
+        for backend in "${LINUX_WIFI_BACKENDS[@]}"; do
+            local network
+            network=$(get_current_network_with_backend "$backend")
+            if [ -n "$network" ]; then
+                echo "$network"
+                return
+            fi
+        done
+        echo ""
     else
         echo ""
     fi
@@ -162,22 +177,98 @@ cycle_wifi_interface() {
         /usr/sbin/networksetup -setairportpower "$WIFI_INTERFACE" on
         sleep 3
     elif [ "$OS_TYPE" = "Linux" ]; then
-        case "$LINUX_WIFI_BACKEND" in
-            nmcli)
-                nmcli radio wifi off
-                sleep 2
-                nmcli radio wifi on
-                ;;
-            wpa_cli|iwd)
-                ip link set "$WIFI_INTERFACE" down
-                sleep 2
-                ip link set "$WIFI_INTERFACE" up
-                ;;
-        esac
+        # Use ip link which works regardless of backend
+        ip link set "$WIFI_INTERFACE" down 2>/dev/null || nmcli radio wifi off 2>/dev/null
+        sleep 2
+        ip link set "$WIFI_INTERFACE" up 2>/dev/null || nmcli radio wifi on 2>/dev/null
         sleep 3
     fi
 
     echo -e "${GREEN}WiFi interface cycled${NC}"
+}
+
+connect_with_backend() {
+    local backend="$1"
+    local network="$2"
+    local password="$3"
+
+    local result
+    local exit_code
+
+    case "$backend" in
+        nmcli)
+            echo "DEBUG: Attempting connection using nmcli"
+            # First, check if we have a saved connection for this network
+            if nmcli connection show "$network" &>/dev/null; then
+                echo "DEBUG: Found saved connection, activating..."
+                result=$(nmcli connection up "$network" 2>&1)
+                exit_code=$?
+            else
+                # Create new connection with password
+                if [ -z "$password" ]; then
+                    echo "DEBUG: Connecting without password"
+                    result=$(nmcli device wifi connect "$network" 2>&1)
+                else
+                    echo "DEBUG: Connecting with password"
+                    result=$(nmcli device wifi connect "$network" password "$password" 2>&1)
+                fi
+                exit_code=$?
+            fi
+            echo "DEBUG: nmcli exit code: $exit_code"
+            ;;
+
+        wpa_cli)
+            echo "DEBUG: Attempting connection using wpa_cli"
+            # First, check if network is already configured in wpa_supplicant.conf
+            local net_id
+            net_id=$(wpa_cli -i "$WIFI_INTERFACE" list_networks 2>/dev/null | grep -w "$network" | cut -f1)
+
+            if [ -n "$net_id" ]; then
+                echo "DEBUG: Found existing network '$network' with ID $net_id"
+                result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
+                exit_code=$?
+                echo "DEBUG: wpa_cli select_network exit code: $exit_code"
+            else
+                # Network not configured, try to add it dynamically
+                echo "DEBUG: Network '$network' not found, adding dynamically..."
+                net_id=$(wpa_cli -i "$WIFI_INTERFACE" add_network 2>/dev/null | tail -1)
+
+                if [ -n "$net_id" ] && [ "$net_id" != "FAIL" ]; then
+                    wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" ssid "\"$network\"" >/dev/null 2>&1
+                    if [ -n "$password" ]; then
+                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" psk "\"$password\"" >/dev/null 2>&1
+                    else
+                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" key_mgmt NONE >/dev/null 2>&1
+                    fi
+                    wpa_cli -i "$WIFI_INTERFACE" enable_network "$net_id" >/dev/null 2>&1
+                    result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
+                    exit_code=$?
+                    echo "DEBUG: wpa_cli exit code: $exit_code"
+                else
+                    echo -e "${RED}ERROR: Failed to add network via wpa_cli${NC}"
+                    exit_code=1
+                fi
+            fi
+            ;;
+
+        iwd)
+            echo "DEBUG: Attempting connection using iwctl"
+            if [ -n "$password" ]; then
+                # For password-protected networks, we need to use iwctl interactively or agent
+                result=$(echo "$password" | iwctl station "$WIFI_INTERFACE" connect "$network" --passphrase 2>&1)
+            else
+                result=$(iwctl station "$WIFI_INTERFACE" connect "$network" 2>&1)
+            fi
+            exit_code=$?
+            echo "DEBUG: iwctl exit code: $exit_code"
+            ;;
+    esac
+
+    if [ -n "$result" ]; then
+        echo "Output: $result"
+    fi
+
+    return $exit_code
 }
 
 connect_to_network() {
@@ -214,84 +305,24 @@ connect_to_network() {
         fi
 
     elif [ "$OS_TYPE" = "Linux" ]; then
-        local result
-        local exit_code
+        local exit_code=1
 
-        case "$LINUX_WIFI_BACKEND" in
-            nmcli)
-                echo "DEBUG: Attempting connection using nmcli"
-                # First, check if we have a saved connection for this network
-                if nmcli connection show "$network" &>/dev/null; then
-                    echo "DEBUG: Found saved connection, activating..."
-                    result=$(nmcli connection up "$network" 2>&1)
-                    exit_code=$?
-                else
-                    # Create new connection with password
-                    if [ -z "$password" ]; then
-                        echo "DEBUG: Connecting without password"
-                        result=$(nmcli device wifi connect "$network" 2>&1)
-                    else
-                        echo "DEBUG: Connecting with password"
-                        result=$(nmcli device wifi connect "$network" password "$password" 2>&1)
-                    fi
-                    exit_code=$?
-                fi
-                echo "DEBUG: nmcli exit code: $exit_code"
-                ;;
+        # Try each backend until one succeeds
+        for backend in "${LINUX_WIFI_BACKENDS[@]}"; do
+            echo "DEBUG: Trying backend: $backend"
+            connect_with_backend "$backend" "$network" "$password"
+            exit_code=$?
 
-            wpa_cli)
-                echo "DEBUG: Attempting connection using wpa_cli"
-                # First, check if network is already configured in wpa_supplicant.conf
-                local net_id
-                net_id=$(wpa_cli -i "$WIFI_INTERFACE" list_networks 2>/dev/null | grep -w "$network" | cut -f1)
-
-                if [ -n "$net_id" ]; then
-                    echo "DEBUG: Found existing network '$network' with ID $net_id"
-                    result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
-                    exit_code=$?
-                    echo "DEBUG: wpa_cli select_network exit code: $exit_code"
-                else
-                    # Network not configured, try to add it dynamically
-                    echo "DEBUG: Network '$network' not found, adding dynamically..."
-                    net_id=$(wpa_cli -i "$WIFI_INTERFACE" add_network 2>/dev/null | tail -1)
-
-                    if [ -n "$net_id" ] && [ "$net_id" != "FAIL" ]; then
-                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" ssid "\"$network\"" >/dev/null 2>&1
-                        if [ -n "$password" ]; then
-                            wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" psk "\"$password\"" >/dev/null 2>&1
-                        else
-                            wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" key_mgmt NONE >/dev/null 2>&1
-                        fi
-                        wpa_cli -i "$WIFI_INTERFACE" enable_network "$net_id" >/dev/null 2>&1
-                        result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
-                        exit_code=$?
-                        echo "DEBUG: wpa_cli exit code: $exit_code"
-                    else
-                        echo -e "${RED}ERROR: Failed to add network via wpa_cli${NC}"
-                        exit_code=1
-                    fi
-                fi
-                ;;
-
-            iwd)
-                echo "DEBUG: Attempting connection using iwctl"
-                if [ -n "$password" ]; then
-                    # For password-protected networks, we need to use iwctl interactively or agent
-                    result=$(echo "$password" | iwctl station "$WIFI_INTERFACE" connect "$network" --passphrase 2>&1)
-                else
-                    result=$(iwctl station "$WIFI_INTERFACE" connect "$network" 2>&1)
-                fi
-                exit_code=$?
-                echo "DEBUG: iwctl exit code: $exit_code"
-                ;;
-        esac
-
-        if [ -n "$result" ]; then
-            echo "Output: $result"
-        fi
+            if [ $exit_code -eq 0 ]; then
+                echo "DEBUG: Successfully connected using $backend"
+                break
+            else
+                echo -e "${YELLOW}WARNING: $backend failed with exit code $exit_code, trying next backend...${NC}"
+            fi
+        done
 
         if [ $exit_code -ne 0 ]; then
-            echo -e "${RED}WARNING: WiFi command returned error code $exit_code${NC}"
+            echo -e "${RED}WARNING: All WiFi backends failed${NC}"
             echo "This may indicate a permissions issue or network not found"
         fi
     else
