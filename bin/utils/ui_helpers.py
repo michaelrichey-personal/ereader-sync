@@ -42,7 +42,6 @@ CORE_CONFIG_CATEGORIES = {
         "CONNECTION_WAIT_TIME",
         "MAX_RETRIES",
         "RETRY_DELAY",
-        "EPAPER_TIMEOUT",
     ],
     "E-Paper Device Settings": ["EPAPER_DEVICE_IP", "EPAPER_UPLOAD_ENDPOINT"],
     "Directory Configuration": [

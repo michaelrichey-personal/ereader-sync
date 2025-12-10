@@ -18,18 +18,24 @@ echo "DEBUG: PATH: $PATH"
 # Detect Linux WiFi backend
 LINUX_WIFI_BACKEND=""
 if [ "$OS_TYPE" = "Linux" ]; then
-    if command -v nmcli &>/dev/null && nmcli general status &>/dev/null 2>&1; then
+    # Check if NetworkManager is actually running (not just installed)
+    if command -v nmcli &>/dev/null && systemctl is-active --quiet NetworkManager 2>/dev/null; then
         LINUX_WIFI_BACKEND="nmcli"
         echo "DEBUG: Using NetworkManager (nmcli)"
-    elif command -v wpa_cli &>/dev/null; then
+    elif command -v wpa_cli &>/dev/null && systemctl is-active --quiet wpa_supplicant 2>/dev/null; then
         LINUX_WIFI_BACKEND="wpa_cli"
         echo "DEBUG: Using wpa_supplicant (wpa_cli)"
-    elif command -v iwctl &>/dev/null; then
+    elif command -v iwctl &>/dev/null && systemctl is-active --quiet iwd 2>/dev/null; then
         LINUX_WIFI_BACKEND="iwd"
         echo "DEBUG: Using iwd (iwctl)"
     else
-        echo "ERROR: No supported WiFi manager found on Linux"
-        echo "Please install one of: NetworkManager (nmcli), wpa_supplicant (wpa_cli), or iwd (iwctl)"
+        echo "ERROR: No supported WiFi manager found running on Linux"
+        echo "Checked: NetworkManager (nmcli), wpa_supplicant (wpa_cli), iwd (iwctl)"
+        echo ""
+        echo "Service status:"
+        systemctl is-active NetworkManager 2>/dev/null || echo "  NetworkManager: not running"
+        systemctl is-active wpa_supplicant 2>/dev/null || echo "  wpa_supplicant: not running"
+        systemctl is-active iwd 2>/dev/null || echo "  iwd: not running"
         exit 1
     fi
 fi
@@ -114,7 +120,6 @@ echo "DEBUG: Running from directory: $(pwd)"
 
 # Global variables to track state
 ORIGINAL_NETWORK=""
-TIMEOUT_PID=""
 
 # ============================================================
 # OS-specific WiFi functions
@@ -236,24 +241,35 @@ connect_to_network() {
 
             wpa_cli)
                 echo "DEBUG: Attempting connection using wpa_cli"
-                # Create a temporary config or use wpa_cli to add network
+                # First, check if network is already configured in wpa_supplicant.conf
                 local net_id
-                net_id=$(wpa_cli -i "$WIFI_INTERFACE" add_network 2>/dev/null | tail -1)
+                net_id=$(wpa_cli -i "$WIFI_INTERFACE" list_networks 2>/dev/null | grep -w "$network" | cut -f1)
 
-                if [ -n "$net_id" ] && [ "$net_id" != "FAIL" ]; then
-                    wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" ssid "\"$network\"" >/dev/null 2>&1
-                    if [ -n "$password" ]; then
-                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" psk "\"$password\"" >/dev/null 2>&1
-                    else
-                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" key_mgmt NONE >/dev/null 2>&1
-                    fi
-                    wpa_cli -i "$WIFI_INTERFACE" enable_network "$net_id" >/dev/null 2>&1
+                if [ -n "$net_id" ]; then
+                    echo "DEBUG: Found existing network '$network' with ID $net_id"
                     result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
                     exit_code=$?
-                    echo "DEBUG: wpa_cli exit code: $exit_code"
+                    echo "DEBUG: wpa_cli select_network exit code: $exit_code"
                 else
-                    echo -e "${RED}ERROR: Failed to add network via wpa_cli${NC}"
-                    exit_code=1
+                    # Network not configured, try to add it dynamically
+                    echo "DEBUG: Network '$network' not found, adding dynamically..."
+                    net_id=$(wpa_cli -i "$WIFI_INTERFACE" add_network 2>/dev/null | tail -1)
+
+                    if [ -n "$net_id" ] && [ "$net_id" != "FAIL" ]; then
+                        wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" ssid "\"$network\"" >/dev/null 2>&1
+                        if [ -n "$password" ]; then
+                            wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" psk "\"$password\"" >/dev/null 2>&1
+                        else
+                            wpa_cli -i "$WIFI_INTERFACE" set_network "$net_id" key_mgmt NONE >/dev/null 2>&1
+                        fi
+                        wpa_cli -i "$WIFI_INTERFACE" enable_network "$net_id" >/dev/null 2>&1
+                        result=$(wpa_cli -i "$WIFI_INTERFACE" select_network "$net_id" 2>&1)
+                        exit_code=$?
+                        echo "DEBUG: wpa_cli exit code: $exit_code"
+                    else
+                        echo -e "${RED}ERROR: Failed to add network via wpa_cli${NC}"
+                        exit_code=1
+                    fi
                 fi
                 ;;
 
@@ -325,18 +341,6 @@ if [ "$SKIP_SWITCH" = false ]; then
     echo "======================================================"
 
     connect_to_network "$EPAPER_NETWORK" "$EPAPER_NETWORK_PASSWORD"
-
-    # Start timeout watchdog in background
-    echo "Starting ${EPAPER_TIMEOUT}s timeout watchdog..."
-    (
-        sleep "$EPAPER_TIMEOUT"
-        echo ""
-        echo "TIMEOUT: ${EPAPER_TIMEOUT}s elapsed on E-Paper network"
-        echo "Forcing reconnection to original network..."
-        # Send SIGTERM to parent script to trigger trap
-        kill -TERM $$ 2>/dev/null
-    ) &
-    TIMEOUT_PID=$!
 fi
 
 # ============================================================
@@ -368,12 +372,6 @@ fi
 # ============================================================
 # END OF WORK SECTION
 # ============================================================
-
-# Kill timeout watchdog since we completed successfully
-if [ -n "$TIMEOUT_PID" ] && ps -p "$TIMEOUT_PID" > /dev/null 2>&1; then
-    kill "$TIMEOUT_PID" 2>/dev/null
-    echo "Timeout watchdog cancelled"
-fi
 
 # Switch back to original network
 if [ "$SKIP_SWITCH" = false ]; then

@@ -78,9 +78,8 @@ Watch for errors. Common issues:
 
 #### Script hangs or times out
 - Check your config values in `config/application.config`:
-  - `EPAPER_TIMEOUT` (default: 30 seconds)
   - `CONNECTION_WAIT_TIME` (default: 8 seconds)
-- Try increasing these values
+- Try increasing this value
 
 ### Step 3: Verify Configuration
 

@@ -14,6 +14,9 @@ import os
 import sys
 import time
 
+# Ensure bin directory is in path for imports when run directly
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import requests
 from bin.config_reader import get_config, get_repo_root
 from bin.utils.common import output_progress, suppress_urllib3_warning

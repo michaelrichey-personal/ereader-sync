@@ -38,7 +38,6 @@ cp config/secrets.config.template config/secrets.config
 - `CONNECTION_WAIT_TIME` - Seconds to wait after connecting (default: 8)
 - `MAX_RETRIES` - Maximum connection retry attempts (default: 3)
 - `RETRY_DELAY` - Seconds between retry attempts (default: 5)
-- `EPAPER_TIMEOUT` - Maximum seconds on E-Paper network before auto-reconnect (default: 30)
 
 **XTC Conversion Settings:**
 - `XTC_FONT_FAMILY` - Font family for XTC conversion
@@ -117,7 +116,6 @@ The repository consists of scraper scripts, UI applications, orchestration scrip
   - Auto-detects current WiFi network and saves it
   - Switches to network specified by `EPAPER_NETWORK` config
   - Executes the upload script
-  - **Safety features**: Timeout watchdog (`EPAPER_TIMEOUT` seconds), emergency reconnect on errors/interrupts
   - Automatically switches back to original network (or `ORIGINAL_NETWORK_FALLBACK` if detection fails)
   - If already on E-Paper network, skips switch
   - All timing values configurable in `application.config`
@@ -279,8 +277,6 @@ PROGRESS|15|2|17|20|Uploading: hackernews/article.xtc
 ### WiFi Switching Safety
 - Uses macOS `networksetup` commands for WiFi interface specified in `WIFI_INTERFACE`
 - Falls back to `ORIGINAL_NETWORK_FALLBACK` network if auto-detection fails
-- Implements trap handlers to always attempt reconnection on exit/error
-- Background timeout watchdog kills script after `EPAPER_TIMEOUT` seconds
 - All timing values configurable: `CONNECTION_WAIT_TIME`, `MAX_RETRIES`, `RETRY_DELAY`
 - Runs Python with `-u` flag for unbuffered output to enable real-time progress in GUI/TUI
 

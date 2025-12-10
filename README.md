@@ -19,8 +19,9 @@ A comprehensive system for scraping web content, converting to EPUB/XTC format, 
 ## Quick Install
 
 ```bash
-git clone https://github.com/michaelrichey-personal/ereader-sync.git
+git clone git@github.com/michaelrichey-personal/ereader-sync.git
 cd ereader-sync
+curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync                # Install dependencies (use 'uv sync --extra gui' for GUI)
 cp config/secrets.config.template config/secrets.config
 # Edit config/secrets.config with your WiFi passwords
