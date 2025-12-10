@@ -102,6 +102,9 @@ uv run convert-to-xtc --all
 
 # Upload without WiFi switching (if already on e-paper network)
 uv run upload-to-epaper
+
+# Monitor for e-paper network and auto-upload when available
+./bin/poll_epaper_network.sh
 ```
 
 ## Documentation
@@ -123,6 +126,7 @@ ereader-sync/
 │   ├── convert_epub_to_xtc.py
 │   ├── upload_to_epaper.py
 │   ├── switch_to_epaper_wifi.sh
+│   ├── poll_epaper_network.sh  # Network monitor
 │   └── utils/               # Shared utilities
 │       └── config_reader.py
 ├── config/                   # Configuration files
@@ -166,6 +170,33 @@ All configuration is in the `config/` directory:
 - `XTC_ORIENTATION` - portrait or landscape
 
 See `config/application.config` for all available options.
+
+## Automated Sync with Network Polling
+
+The `poll_epaper_network.sh` script continuously monitors for the E-Paper WiFi network and automatically triggers a sync when it becomes available. This is useful for hands-free syncing when you bring your e-reader within range of your computer.
+
+```bash
+# Start the network monitor (runs until Ctrl+C)
+./bin/poll_epaper_network.sh
+
+# Custom poll interval (default: 5 seconds)
+POLL_INTERVAL=10 ./bin/poll_epaper_network.sh
+
+# Monitor only (disable auto-upload)
+AUTO_UPLOAD=false ./bin/poll_epaper_network.sh
+```
+
+**Triggering sync from the e-reader itself:** If you generate content via cron (e.g., scraping HN stories every morning), you can leave this script running on your server. When you turn on your XTEink device and its WiFi hotspot becomes visible, the script will detect it and automatically upload all pending files. This lets you trigger a sync simply by powering on your e-reader.
+
+**Example cron + polling workflow:**
+```bash
+# Crontab: Generate fresh content every morning at 6am
+0 6 * * * cd /path/to/ereader-sync && uv run scrape-hn && uv run convert-to-xtc --all
+
+# Run the polling script as a background service or in a tmux session
+./bin/poll_epaper_network.sh
+# When you turn on your e-reader, files upload automatically
+```
 
 ## Troubleshooting
 
