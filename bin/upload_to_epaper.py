@@ -4,6 +4,10 @@ Script to upload ebook files to e-paper device.
 Supports EPUB, XTC, XTG, XTH, XTCH and other formats. Maintains directory structure from texts/.
 By default, files are deleted after successful upload.
 
+Tracks uploaded files in a 'finished' file to avoid re-uploading.
+Files that were previously uploaded are skipped and deleted locally.
+The finished file is uploaded to the e-reader at the end.
+
 Usage:
     upload_to_epaper.py                       # Upload all files (delete after sync)
     upload_to_epaper.py --keep-files          # Upload all files (keep after sync)
@@ -27,6 +31,49 @@ suppress_urllib3_warning()
 
 # Supported ebook file extensions
 SUPPORTED_EXTENSIONS = (".epub", ".xtc", ".xtg", ".xth", ".xtch")
+
+# Filename for tracking uploaded files
+FINISHED_FILENAME = "finished"
+
+
+def load_finished_files(texts_dir):
+    """Load the set of previously uploaded file paths from the finished file.
+
+    Args:
+        texts_dir: Directory where the finished file is stored
+
+    Returns:
+        Set of relative file paths that have been previously uploaded
+    """
+    finished_path = os.path.join(texts_dir, FINISHED_FILENAME)
+    finished_files = set()
+
+    if os.path.exists(finished_path):
+        try:
+            with open(finished_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        finished_files.add(line)
+        except Exception as e:
+            print(f"Warning: Could not read finished file: {e}")
+
+    return finished_files
+
+
+def append_to_finished_file(texts_dir, relative_path):
+    """Append a file path to the finished file.
+
+    Args:
+        texts_dir: Directory where the finished file is stored
+        relative_path: Relative path of the file to record
+    """
+    finished_path = os.path.join(texts_dir, FINISHED_FILENAME)
+    try:
+        with open(finished_path, "a", encoding="utf-8") as f:
+            f.write(relative_path + "\n")
+    except Exception as e:
+        print(f"Warning: Could not write to finished file: {e}")
 
 
 def find_ebook_files(directory):
@@ -195,15 +242,37 @@ def main():
             rel_path = os.path.basename(file_path)
         file_info.append((file_path, rel_path))
 
-    print(f"\nFound {len(file_info)} e-book file(s) to upload:\n")
-    for i, (file_path, rel_path) in enumerate(file_info, 1):
+    # Load previously uploaded files from finished file
+    finished_files = load_finished_files(texts_dir)
+    if finished_files:
+        print(f"\nLoaded {len(finished_files)} previously uploaded file(s) from 'finished' file")
+
+    # Separate files into those to upload vs those to skip
+    files_to_upload = []
+    files_to_skip = []
+    for file_path, rel_path in file_info:
+        if rel_path in finished_files:
+            files_to_skip.append((file_path, rel_path))
+        else:
+            files_to_upload.append((file_path, rel_path))
+
+    print(f"\nFound {len(file_info)} e-book file(s):")
+    print(f"  - {len(files_to_upload)} to upload")
+    print(f"  - {len(files_to_skip)} already uploaded (will be skipped and deleted)\n")
+
+    for i, (file_path, rel_path) in enumerate(files_to_upload, 1):
         size = os.path.getsize(file_path)
         size_kb = size / 1024
         print(f"  {i}. {rel_path} ({size_kb:.1f} KB)")
 
-    # Extract unique subdirectories that need to be created
+    if files_to_skip:
+        print("\nFiles to skip (already uploaded):")
+        for i, (file_path, rel_path) in enumerate(files_to_skip, 1):
+            print(f"  {i}. {rel_path}")
+
+    # Extract unique subdirectories that need to be created (only for files to upload)
     folders_to_create = set()
-    for file_path, rel_path in file_info:
+    for file_path, rel_path in files_to_upload:
         # Get directory part of relative path
         dir_path = os.path.dirname(rel_path)
         if dir_path:  # Only if file is in a subdirectory
@@ -218,9 +287,10 @@ def main():
                 folders_to_create.add(current_path)
 
     # Create folders on device
-    total_files = len(file_info)
+    total_files = len(files_to_upload)
     success_count = 0
     fail_count = 0
+    skip_count = len(files_to_skip)
 
     # Output initial progress
     output_progress(0, 0, 0, total_files, "Starting upload to e-paper device")
@@ -253,13 +323,15 @@ def main():
     uploaded_files = []
 
     # Upload each file
-    for i, (file_path, rel_path) in enumerate(file_info, 1):
+    for i, (file_path, rel_path) in enumerate(files_to_upload, 1):
         output_progress(success_count, fail_count, i - 1, total_files, f"Uploading: {rel_path}")
         print(f"[{i}/{total_files}] ", end="")
 
         if upload_file(file_path, rel_path, target_url, config["UPLOAD_TIMEOUT"]):
             success_count += 1
             uploaded_files.append((file_path, rel_path))
+            # Record this file as uploaded in the finished file
+            append_to_finished_file(texts_dir, rel_path)
         else:
             fail_count += 1
 
@@ -285,15 +357,44 @@ def main():
             except Exception as e:
                 print(f"  Warning: Could not delete {rel_path}: {e}")
 
+    # Delete skipped files (already uploaded previously)
+    skipped_deleted_count = 0
+    if not keep_files and files_to_skip:
+        print("\n" + "=" * 60)
+        print("Cleaning up skipped files (already uploaded)")
+        print("=" * 60 + "\n")
+
+        for file_path, rel_path in files_to_skip:
+            try:
+                os.remove(file_path)
+                print(f"  Deleted (skipped): {rel_path}")
+                skipped_deleted_count += 1
+            except Exception as e:
+                print(f"  Warning: Could not delete {rel_path}: {e}")
+
+    # Upload the finished file to the e-reader
+    finished_file_path = os.path.join(texts_dir, FINISHED_FILENAME)
+    if os.path.exists(finished_file_path):
+        print("\n" + "=" * 60)
+        print("Uploading finished file to e-reader")
+        print("=" * 60 + "\n")
+
+        if upload_file(finished_file_path, FINISHED_FILENAME, target_url, config["UPLOAD_TIMEOUT"]):
+            print("Finished file uploaded successfully")
+        else:
+            print("Warning: Failed to upload finished file")
+
     # Summary
     print("\n" + "=" * 60)
     print("Upload Summary")
     print("=" * 60)
-    print(f"Total files: {total_files}")
+    print(f"Total files found: {len(file_info)}")
     print(f"Uploaded: {success_count}")
+    print(f"Skipped (already uploaded): {skip_count}")
     print(f"Failed: {fail_count}")
     if not keep_files:
-        print(f"Deleted: {deleted_count}")
+        print(f"Deleted (newly uploaded): {deleted_count}")
+        print(f"Deleted (skipped): {skipped_deleted_count}")
     print("=" * 60)
 
 
